@@ -1,0 +1,982 @@
+<!DOCTYPE html>
+<html lang="en" class="h-full bg-[#F5F5F5] text-slate-800">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>RTA Workforce Scheduler</title>
+  <!-- Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Google Font: Inter -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <!-- Lucide Icons CDN -->
+  <script src="https://unpkg.com/lucide@latest"></script>
+  <style>
+    body { font-family: 'Inter', sans-serif; }
+    /* Custom Shopee scrollbar for grid */
+    ::-webkit-scrollbar-track { background: #f1f1f1; }
+    ::-webkit-scrollbar-thumb { background: #ee4d2d; border-radius: 4px; }
+    ::-webkit-scrollbar-thumb:hover { background: #d03e1f; }
+  </style>
+</head>
+<body class="h-full flex flex-col min-h-screen bg-[#F5F5F5] text-slate-800">
+
+  <!-- Top Navigation Bar (Shopee Orange Header) -->
+  <header class="bg-[#EE4D2D] text-white sticky top-0 z-30 shadow-md border-b border-[#d73211]">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
+      <div class="flex items-center space-x-3">
+        <div class="p-2 bg-white text-[#EE4D2D] rounded-lg shadow-sm">
+          <i data-lucide="calendar" class="w-6 h-6"></i>
+        </div>
+        <div>
+          <h1 class="font-bold text-lg text-white tracking-wide">RTA Scheduler</h1>
+          <p class="text-xs text-orange-100">Workforce Management System</p>
+        </div>
+      </div>
+
+      <!-- Admin Status & Actions -->
+      <div class="flex items-center space-x-3">
+        <div id="adminBadge" class="hidden items-center px-3 py-1 rounded-full text-xs font-semibold bg-amber-500/10 text-amber-400 border border-amber-500/30">
+          <i data-lucide="shield-check" class="w-3.5 h-3.5 mr-1.5"></i> Admin Mode Active
+        </div>
+        
+        <button id="adminToggleBtn" onclick="handleAdminToggle()" class="flex items-center px-3.5 py-1.5 text-xs font-medium rounded-lg transition border border-slate-700 bg-slate-800 text-slate-200 hover:bg-slate-700">
+          <i data-lucide="lock" class="w-4 h-4 mr-1.5"></i>
+          <span id="adminToggleText">Admin Login</span>
+        </button>
+
+        <button id="bulkScheduleBtn" onclick="openBulkModal()" class="hidden items-center px-3.5 py-1.5 text-xs font-medium rounded-lg transition bg-indigo-600 text-white hover:bg-indigo-500 shadow-md shadow-indigo-600/20">
+          <i data-lucide="layers" class="w-4 h-4 mr-1.5"></i> Bulk Shiftline
+        </button>
+
+        <button id="addRtaBtn" onclick="openAddRtaModal()" class="hidden items-center px-3.5 py-1.5 text-xs font-medium rounded-lg transition bg-emerald-600 text-white hover:bg-emerald-500 shadow-md shadow-emerald-600/20">
+          <i data-lucide="user-plus" class="w-4 h-4 mr-1.5"></i> Add RTA
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <main class="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-6">
+
+    <!-- Controls & Week Navigator -->
+    <div class="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-slate-900/80 p-4 rounded-xl border border-slate-800 backdrop-blur-sm">
+      <div class="flex items-center space-x-2">
+        <button onclick="navigateWeek(-1)" class="p-2 rounded-lg bg-slate-800 text-slate-300 hover:bg-slate-700 transition border border-slate-700" title="Previous Week">
+          <i data-lucide="chevron-left" class="w-5 h-5"></i>
+        </button>
+        <button onclick="navigateWeek(1)" class="p-2 rounded-lg bg-slate-800 text-slate-300 hover:bg-slate-700 transition border border-slate-700" title="Next Week">
+          <i data-lucide="chevron-right" class="w-5 h-5"></i>
+        </button>
+        <button onclick="jumpToCurrentWeek()" class="px-3 py-2 text-xs font-medium rounded-lg bg-slate-800 text-slate-300 hover:bg-slate-700 transition border border-slate-700">
+          Current Week
+        </button>
+      </div>
+
+      <div class="text-center md:text-left">
+        <span id="weekDateRangeDisplay" class="text-base font-semibold text-slate-100">Loading...</span>
+      </div>
+
+      <div class="flex items-center space-x-2">
+        <button onclick="toggleLegend()" class="flex items-center px-3 py-2 text-xs font-medium rounded-lg bg-slate-800 text-slate-400 hover:text-slate-200 transition border border-slate-700">
+          <i data-lucide="palette" class="w-4 h-4 mr-1.5"></i> Color Legend
+        </button>
+      </div>
+    </div>
+
+    <!-- Collapsible Color Legend -->
+    <div id="legendPanel" class="hidden bg-slate-900 border border-slate-800 rounded-xl p-4 transition-all duration-300 space-y-4">
+      <div class="flex justify-between items-center border-b border-slate-800 pb-2">
+        <h3 class="text-xs font-semibold text-slate-300 uppercase tracking-wider">Schedule Visual Legend</h3>
+        <button onclick="toggleLegend()" class="text-slate-500 hover:text-slate-300 text-xs">Close</button>
+      </div>
+      
+      <!-- Legend Grid -->
+      <div class="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-3 text-xs">
+        <div class="space-y-1.5">
+          <span class="text-slate-400 font-medium block">Holidays</span>
+          <div class="flex items-center px-2 py-1 rounded bg-red-950/80 text-red-200 border border-red-800/60"><span class="w-2 h-2 rounded-full bg-red-500 mr-1.5"></span> Regular Holiday</div>
+          <div class="flex items-center px-2 py-1 rounded bg-indigo-950/80 text-indigo-200 border border-indigo-800/60"><span class="w-2 h-2 rounded-full bg-indigo-500 mr-1.5"></span> Special Non-Wrk</div>
+        </div>
+        <div class="space-y-1.5">
+          <span class="text-slate-400 font-medium block">Manual Overrides</span>
+          <div class="flex items-center px-2 py-1 rounded bg-emerald-950/80 text-emerald-200 border border-emerald-800"><span class="w-2 h-2 bg-emerald-500 rounded-full mr-1.5"></span> RDOT</div>
+          <div class="flex items-center px-2 py-1 rounded bg-teal-950/80 text-teal-200 border border-teal-800"><span class="w-2 h-2 bg-teal-500 rounded-full mr-1.5"></span> Regular OT</div>
+          <div class="flex items-center px-2 py-1 rounded bg-amber-950/80 text-amber-200 border border-amber-800"><span class="w-2 h-2 bg-amber-500 rounded-full mr-1.5"></span> Swap / Slide</div>
+        </div>
+        <div class="space-y-1.5">
+          <span class="text-slate-400 font-medium block">Leave Types</span>
+          <div class="flex items-center px-2 py-1 rounded bg-blue-950/80 text-blue-200 border border-blue-800"><span class="w-2 h-2 bg-blue-500 rounded-full mr-1.5"></span> VL (Vacation)</div>
+          <div class="flex items-center px-2 py-1 rounded bg-rose-950/80 text-rose-200 border border-rose-800"><span class="w-2 h-2 bg-rose-500 rounded-full mr-1.5"></span> SL (Sick)</div>
+        <div class="flex items-center px-2 py-1 rounded bg-fuchsia-950/80 text-fuchsia-200 border border-fuchsia-800"><span class="w-2 h-2 bg-fuchsia-500 rounded-full mr-1.5"></span> EL</div>
+<div class="flex items-center px-2 py-1 rounded bg-orange-950/80 text-orange-200 border border-orange-800"><span class="w-2 h-2 bg-orange-500 rounded-full mr-1.5"></span> FCL</div>
+        </div>
+        <div class="space-y-1.5">
+          <span class="text-slate-400 font-medium block">Special Leave</span>
+          <div class="flex items-center px-2 py-1 rounded bg-violet-950/80 text-violet-200 border border-violet-800"><span class="w-2 h-2 bg-violet-500 rounded-full mr-1.5"></span> PL / SPL</div>
+          <div class="flex items-center px-2 py-1 rounded bg-fuchsia-950/80 text-fuchsia-200 border border-fuchsia-800"><span class="w-2 h-2 bg-fuchsia-500 rounded-full mr-1.5"></span> CL / OIL</div>
+          <div class="flex items-center px-2 py-1 rounded bg-slate-800 text-slate-300 border border-slate-700"><span class="w-2 h-2 bg-slate-500 rounded-full mr-1.5"></span> NPL</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Schedule Grid Table Wrapper -->
+    <div class="bg-slate-900 rounded-xl border border-slate-800 overflow-hidden shadow-xl">
+      <div class="overflow-x-auto">
+        <table class="w-full text-left border-collapse min-w-[900px]">
+          <thead>
+            <tr class="bg-slate-800/90 text-slate-300 text-xs font-semibold border-b border-slate-700">
+              <th class="py-3 px-4 w-52 sticky left-0 bg-slate-800 z-20 border-r border-slate-700 shadow-md">
+                RTA Name
+              </th>
+              <!-- Days Header dynamically populated -->
+              <th id="th-0" class="py-3 px-3 text-center w-36 border-r border-slate-700/50"></th>
+              <th id="th-1" class="py-3 px-3 text-center w-36 border-r border-slate-700/50"></th>
+              <th id="th-2" class="py-3 px-3 text-center w-36 border-r border-slate-700/50"></th>
+              <th id="th-3" class="py-3 px-3 text-center w-36 border-r border-slate-700/50"></th>
+              <th id="th-4" class="py-3 px-3 text-center w-36 border-r border-slate-700/50"></th>
+              <th id="th-5" class="py-3 px-3 text-center w-36 border-r border-slate-700/50"></th>
+              <th id="th-6" class="py-3 px-3 text-center w-36"></th>
+            </tr>
+          </thead>
+          <tbody id="scheduleGridBody" class="divide-y divide-slate-800/80 text-xs">
+            <!-- Dynamic Schedule Rows -->
+          </tbody>
+        </table>
+      </div>
+      <!-- Empty state if no RTAs -->
+      <div id="emptyRtaState" class="hidden p-8 text-center text-slate-500">
+        <i data-lucide="users" class="w-10 h-10 mx-auto mb-2 opacity-50"></i>
+        <p class="text-sm">No Active RTAs found in the system.</p>
+        <p class="text-xs mt-1">Login as Admin to add Real-Time Analysts.</p>
+      </div>
+    </div>
+  </main>
+
+  <!-- MODAL 1: Admin PIN Login -->
+  <div id="pinModal" class="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50 hidden">
+    <div class="bg-slate-900 border border-slate-800 rounded-xl p-6 max-w-sm w-full shadow-2xl space-y-4">
+      <div class="flex justify-between items-center border-b border-slate-800 pb-3">
+        <h3 class="font-bold text-slate-100 flex items-center">
+          <i data-lucide="shield-lock" class="w-5 h-5 text-amber-400 mr-2"></i> Admin Authentication
+        </h3>
+        <button onclick="closeModal('pinModal')" class="text-slate-400 hover:text-slate-200">
+          <i data-lucide="x" class="w-5 h-5"></i>
+        </button>
+      </div>
+      <p class="text-xs text-slate-400">Enter Admin PIN to enable editing and administrative overrides.</p>
+      <div>
+        <label class="block text-xs font-medium text-slate-300 mb-1">Admin PIN</label>
+        <input type="password" id="pinInput" maxlength="10" placeholder="••••" class="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-sm text-center tracking-widest text-slate-100 focus:outline-none focus:border-amber-500">
+      </div>
+      <div class="flex space-x-2 pt-2">
+        <button onclick="closeModal('pinModal')" class="w-1/2 py-2 text-xs rounded-lg border border-slate-700 bg-slate-800 text-slate-300 hover:bg-slate-700">Cancel</button>
+        <button onclick="submitPinAuth()" class="w-1/2 py-2 text-xs rounded-lg bg-amber-500 hover:bg-amber-400 text-slate-950 font-semibold">Authenticate</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL 2: Add RTA -->
+  <div id="addRtaModal" class="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50 hidden">
+    <div class="bg-slate-900 border border-slate-800 rounded-xl p-6 max-w-sm w-full shadow-2xl space-y-4">
+      <div class="flex justify-between items-center border-b border-slate-800 pb-3">
+        <h3 class="font-bold text-slate-100 flex items-center">
+          <i data-lucide="user-plus" class="w-5 h-5 text-emerald-400 mr-2"></i> Add New RTA
+        </h3>
+        <button onclick="closeModal('addRtaModal')" class="text-slate-400 hover:text-slate-200"><i data-lucide="x" class="w-5 h-5"></i></button>
+      </div>
+      <div>
+        <label class="block text-xs font-medium text-slate-300 mb-1">RTA Full Name</label>
+        <input type="text" id="newRtaNameInput" placeholder="e.g. Juan Cruz" class="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-sm text-slate-100 focus:outline-none focus:border-emerald-500">
+      </div>
+      <div class="flex space-x-2 pt-2">
+        <button onclick="closeModal('addRtaModal')" class="w-1/2 py-2 text-xs rounded-lg border border-slate-700 bg-slate-800 text-slate-300 hover:bg-slate-700">Cancel</button>
+        <button onclick="saveNewRta()" class="w-1/2 py-2 text-xs rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-semibold">Save RTA</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL 3: Edit RTA Name -->
+  <div id="editRtaModal" class="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50 hidden">
+    <div class="bg-slate-900 border border-slate-800 rounded-xl p-6 max-w-sm w-full shadow-2xl space-y-4">
+      <div class="flex justify-between items-center border-b border-slate-800 pb-3">
+        <h3 class="font-bold text-slate-100 flex items-center">
+          <i data-lucide="edit-3" class="w-5 h-5 text-blue-400 mr-2"></i> Edit RTA Name
+        </h3>
+        <button onclick="closeModal('editRtaModal')" class="text-slate-400 hover:text-slate-200"><i data-lucide="x" class="w-5 h-5"></i></button>
+      </div>
+      <input type="hidden" id="editRtaId">
+      <div>
+        <label class="block text-xs font-medium text-slate-300 mb-1">Full Name</label>
+        <input type="text" id="editRtaNameInput" class="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-sm text-slate-100 focus:outline-none focus:border-blue-500">
+      </div>
+      <div class="flex space-x-2 pt-2">
+        <button onclick="closeModal('editRtaModal')" class="w-1/2 py-2 text-xs rounded-lg border border-slate-700 bg-slate-800 text-slate-300 hover:bg-slate-700">Cancel</button>
+        <button onclick="submitEditRta()" class="w-1/2 py-2 text-xs rounded-lg bg-blue-600 hover:bg-blue-500 text-white font-semibold">Update Name</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL 4: Single Cell Manual Override -->
+  <div id="cellOverrideModal" class="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50 hidden">
+    <div class="bg-slate-900 border border-slate-800 rounded-xl p-6 max-w-md w-full shadow-2xl space-y-4">
+      <div class="flex justify-between items-center border-b border-slate-800 pb-3">
+        <h3 class="font-bold text-slate-100 flex items-center">
+          <i data-lucide="calendar-clock" class="w-5 h-5 text-indigo-400 mr-2"></i> Manual Shift Override
+        </h3>
+        <button onclick="closeModal('cellOverrideModal')" class="text-slate-400 hover:text-slate-200"><i data-lucide="x" class="w-5 h-5"></i></button>
+      </div>
+
+      <input type="hidden" id="cellRtaId">
+      <input type="hidden" id="cellDate">
+
+      <div class="bg-slate-950 p-3 rounded-lg border border-slate-800 text-xs space-y-1">
+        <div><span class="text-slate-400">RTA:</span> <span id="cellRtaName" class="text-indigo-300 font-semibold"></span></div>
+        <div><span class="text-slate-400">Date:</span> <span id="cellDateDisplay" class="text-slate-200"></span></div>
+      </div>
+
+      <div class="grid grid-cols-2 gap-3">
+        <div class="col-span-2 flex items-center space-x-2 bg-slate-950 p-2.5 rounded-lg border border-slate-800">
+          <input type="checkbox" id="cellIsRestDay" onchange="toggleCellRestDay(this.checked)" class="rounded bg-slate-900 border-slate-700 text-indigo-600 focus:ring-0 w-4 h-4">
+          <label for="cellIsRestDay" class="text-xs font-medium text-slate-200 cursor-pointer">Mark as Rest Day (RD)</label>
+        </div>
+
+        <div id="timeFields" class="col-span-2 grid grid-cols-2 gap-3">
+          <div>
+            <label class="block text-xs text-slate-400 mb-1">Start Time</label>
+            <input type="time" id="cellStartTime" value="07:00" class="w-full bg-slate-950 border border-slate-800 rounded-lg px-2.5 py-1.5 text-xs text-slate-100">
+          </div>
+          <div>
+            <label class="block text-xs text-slate-400 mb-1">End Time</label>
+            <input type="time" id="cellEndTime" value="16:00" class="w-full bg-slate-950 border border-slate-800 rounded-lg px-2.5 py-1.5 text-xs text-slate-100">
+          </div>
+        </div>
+
+        <div class="col-span-2">
+          <label class="block text-xs text-slate-400 mb-1">Leave Category</label>
+          <select id="cellLeaveType" class="w-full bg-slate-950 border border-slate-800 rounded-lg px-2.5 py-1.5 text-xs text-slate-100">
+            <option value="">None (Regular Working)</option>
+            <option value="VL">Vacation Leave (VL)</option>
+            <option value="SL">Sick Leave (SL)</option>
+            <option value="EL">Emergency Leave (EL)</option>
+            <option value="FCL">Family Care Leave (FCL)</option>
+            <option value="PL">Paternity Leave (PL)</option>
+            <option value="SPL">Solo Parent Leave (SPL)</option>
+            <option value="CL">Compassionate Leave (CL)</option>
+            <option value="NPL">No Pay Leave (NPL)</option>
+            <option value="OIL">Off-in-Lieu (OIL)</option>
+          </select>
+        </div>
+
+        <!-- Override Reason ONLY available in manual override modal -->
+        <div class="col-span-2">
+          <label class="block text-xs text-slate-400 mb-1">Override Reason</label>
+          <select id="cellOverrideReason" class="w-full bg-slate-950 border border-slate-800 rounded-lg px-2.5 py-1.5 text-xs text-slate-100">
+            <option value="">None</option>
+            <option value="RDOT">Rest Day OT (RDOT)</option>
+            <option value="Regular OT">Regular OT</option>
+            <option value="Swap Schedule">Swap Schedule</option>
+            <option value="Slide-shift">Slide-shift</option>
+            <option value="Other">Other</option>
+          </select>
+        </div>
+
+        <!-- Remarks ONLY available in manual override modal -->
+        <div class="col-span-2">
+          <label class="block text-xs text-slate-400 mb-1">Remarks / Notes</label>
+          <input type="text" id="cellNotes" placeholder="Optional comments..." class="w-full bg-slate-950 border border-slate-800 rounded-lg px-2.5 py-1.5 text-xs text-slate-100">
+        </div>
+      </div>
+
+      <div class="flex space-x-2 pt-2">
+        <button onclick="closeModal('cellOverrideModal')" class="w-1/2 py-2 text-xs rounded-lg border border-slate-700 bg-slate-800 text-slate-300 hover:bg-slate-700">Cancel</button>
+        <button onclick="saveCellOverride()" class="w-1/2 py-2 text-xs rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white font-semibold">Save Schedule</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL 5: Bulk Shiftline Scheduler (Updated per Master Prompt instructions) -->
+  <div id="bulkModal" class="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 hidden p-4 overflow-y-auto">
+    <div class="bg-slate-900 border border-slate-800 rounded-xl p-6 max-w-xl w-full shadow-2xl space-y-5 my-8">
+      <div class="flex justify-between items-center border-b border-slate-800 pb-3">
+        <h3 class="font-bold text-slate-100 flex items-center">
+          <i data-lucide="layers" class="w-5 h-5 text-indigo-400 mr-2"></i> Bulk Shiftline Scheduler
+        </h3>
+        <button onclick="closeModal('bulkModal')" class="text-slate-400 hover:text-slate-200"><i data-lucide="x" class="w-5 h-5"></i></button>
+      </div>
+
+      <!-- Target Selection (No "All Active RTAs" option, target specific RTAs only) -->
+      <div>
+        <label class="block text-xs font-semibold text-slate-300 mb-1.5">1. Target RTAs (Select specific RTAs)</label>
+        <div class="flex items-center justify-between mb-2">
+          <span class="text-[11px] text-slate-400">Choose one or multiple active RTAs:</span>
+          <div class="space-x-2">
+            <button onclick="selectAllBulkRtas(true)" class="text-[11px] text-indigo-400 hover:underline">Select All</button>
+            <button onclick="selectAllBulkRtas(false)" class="text-[11px] text-slate-400 hover:underline">Clear</button>
+          </div>
+        </div>
+        <div id="bulkRtaListContainer" class="max-h-32 overflow-y-auto bg-slate-950 border border-slate-800 rounded-lg p-2.5 space-y-1.5">
+          <!-- RTA Checkboxes populated dynamically -->
+        </div>
+      </div>
+
+      <!-- Shift Pattern Mode Selector -->
+      <div>
+        <label class="block text-xs font-semibold text-slate-300 mb-1.5">2. Shift Pattern Mode</label>
+        <div class="grid grid-cols-2 gap-3">
+          <button type="button" id="btnModeSingle" onclick="switchBulkMode('single')" class="py-2 px-3 text-xs rounded-lg border border-indigo-500 bg-indigo-500/10 text-indigo-300 font-medium">
+            Single Shift Line (Uniform)
+          </button>
+          <button type="button" id="btnModeMulti" onclick="switchBulkMode('multi')" class="py-2 px-3 text-xs rounded-lg border border-slate-700 bg-slate-950 text-slate-400 font-medium">
+            Multi-Shift Line (7-Day Pattern)
+          </button>
+        </div>
+      </div>
+
+      <!-- Pattern Config: Mode A - Single Uniform Shiftline -->
+      <div id="bulkModeSingleContainer" class="bg-slate-950 p-3.5 rounded-lg border border-slate-800 space-y-3">
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label class="block text-xs text-slate-400 mb-1">Start Time</label>
+            <input type="time" id="bulkSingleStartTime" value="07:00" class="w-full bg-slate-900 border border-slate-800 rounded-lg px-2.5 py-1.5 text-xs text-slate-100">
+          </div>
+          <div>
+            <label class="block text-xs text-slate-400 mb-1">End Time</label>
+            <input type="time" id="bulkSingleEndTime" value="16:00" class="w-full bg-slate-900 border border-slate-800 rounded-lg px-2.5 py-1.5 text-xs text-slate-100">
+          </div>
+        </div>
+        <div>
+          <label class="block text-xs text-slate-400 mb-1">Select Rest Days for this Pattern</label>
+          <div class="flex flex-wrap gap-2 text-xs">
+            <label class="flex items-center space-x-1 bg-slate-900 px-2.5 py-1 rounded border border-slate-800 cursor-pointer">
+              <input type="checkbox" value="0" class="bulkSingleRestDay rounded text-indigo-600 focus:ring-0"> <span>Mon</span>
+            </label>
+            <label class="flex items-center space-x-1 bg-slate-900 px-2.5 py-1 rounded border border-slate-800 cursor-pointer">
+              <input type="checkbox" value="1" class="bulkSingleRestDay rounded text-indigo-600 focus:ring-0"> <span>Tue</span>
+            </label>
+            <label class="flex items-center space-x-1 bg-slate-900 px-2.5 py-1 rounded border border-slate-800 cursor-pointer">
+              <input type="checkbox" value="2" class="bulkSingleRestDay rounded text-indigo-600 focus:ring-0"> <span>Wed</span>
+            </label>
+            <label class="flex items-center space-x-1 bg-slate-900 px-2.5 py-1 rounded border border-slate-800 cursor-pointer">
+              <input type="checkbox" value="3" class="bulkSingleRestDay rounded text-indigo-600 focus:ring-0"> <span>Thu</span>
+            </label>
+            <label class="flex items-center space-x-1 bg-slate-900 px-2.5 py-1 rounded border border-slate-800 cursor-pointer">
+              <input type="checkbox" value="4" class="bulkSingleRestDay rounded text-indigo-600 focus:ring-0"> <span>Fri</span>
+            </label>
+            <label class="flex items-center space-x-1 bg-slate-900 px-2.5 py-1 rounded border border-slate-800 cursor-pointer">
+              <input type="checkbox" value="5" checked class="bulkSingleRestDay rounded text-indigo-600 focus:ring-0"> <span>Sat</span>
+            </label>
+            <label class="flex items-center space-x-1 bg-slate-900 px-2.5 py-1 rounded border border-slate-800 cursor-pointer">
+              <input type="checkbox" value="6" checked class="bulkSingleRestDay rounded text-indigo-600 focus:ring-0"> <span>Sun</span>
+            </label>
+          </div>
+        </div>
+      </div>
+
+      <!-- Pattern Config: Mode B - Multi Shiftline (7-Day Pattern) -->
+      <div id="bulkModeMultiContainer" class="hidden bg-slate-950 p-3.5 rounded-lg border border-slate-800 space-y-2 max-h-56 overflow-y-auto">
+        <div class="text-[11px] text-slate-400 mb-1">Configure each day individually (Mon through Sun):</div>
+        <!-- 7 Days Inputs -->
+        <script>
+          const dayNames = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
+        </script>
+        <template id="multiDayRowTemplate">
+          <!-- Populated by JS -->
+        </template>
+        <div id="multiDayRowsList" class="space-y-2"></div>
+      </div>
+
+      <!-- Date Range Scope (Strictly Custom Range Date option only, Rest of current week removed) -->
+      <div>
+        <label class="block text-xs font-semibold text-slate-300 mb-1.5">3. Custom Date Range Scope</label>
+        <div class="grid grid-cols-2 gap-3 bg-slate-950 p-3 rounded-lg border border-slate-800">
+          <div>
+            <label class="block text-[11px] text-slate-400 mb-1">Start Date</label>
+            <input type="date" id="bulkStartDate" class="w-full bg-slate-900 border border-slate-800 rounded px-2.5 py-1.5 text-xs text-slate-100">
+          </div>
+          <div>
+            <label class="block text-[11px] text-slate-400 mb-1">End Date</label>
+            <input type="date" id="bulkEndDate" class="w-full bg-slate-900 border border-slate-800 rounded px-2.5 py-1.5 text-xs text-slate-100">
+          </div>
+        </div>
+      </div>
+
+      <!-- Action Buttons -->
+      <div class="flex space-x-2 pt-2 border-t border-slate-800">
+        <button onclick="closeModal('bulkModal')" class="w-1/3 py-2 text-xs rounded-lg border border-slate-700 bg-slate-800 text-slate-300 hover:bg-slate-700">Cancel</button>
+        <button onclick="submitBulkSchedule()" class="w-2/3 py-2 text-xs rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white font-semibold flex items-center justify-center">
+          <i data-lucide="check-circle-2" class="w-4 h-4 mr-1.5"></i> Apply Bulk Shiftline
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // Default system admin state
+    let isAdminActive = false;
+    let currentWeekStartDate = getMonday(new Date());
+
+    // Storage Key
+    const STORAGE_KEY_RTAS = "rta_app_rtas_v2";
+    const STORAGE_KEY_SCHEDULES = "rta_app_schedules_v2";
+    const STORAGE_KEY_PIN = "rta_app_admin_pin_v2";
+
+    // Initial default PIN
+    let adminPin = localStorage.getItem(STORAGE_KEY_PIN) || "2626";
+
+    // Standard Philippine Holidays Precomputed Data Generator
+    function getPhilippineHolidays(year) {
+      return [
+        // Regular / Legal Holidays
+        { date: `${year}-01-01`, name: "New Year's Day", type: "regular" },
+        { date: `${year}-04-09`, name: "Araw ng Kagitingan", type: "regular" },
+        { date: `${year}-05-01`, name: "Labor Day", type: "regular" },
+        { date: `${year}-06-12`, name: "Independence Day", type: "regular" },
+        { date: `${year}-08-31`, name: "National Heroes Day", type: "regular" },
+        { date: `${year}-11-30`, name: "Bonifacio Day", type: "regular" },
+        { date: `${year}-12-25`, name: "Christmas Day", type: "regular" },
+        { date: `${year}-12-30`, name: "Rizal Day", type: "regular" },
+        // Easter movable approximations for common operational years
+        { date: `${year}-04-02`, name: "Maundy Thursday", type: "regular" },
+        { date: `${year}-04-03`, name: "Good Friday", type: "regular" },
+
+        // Special Non-Working Holidays
+        { date: `${year}-08-21`, name: "Ninoy Aquino Day", type: "special" },
+        { date: `${year}-11-01`, name: "All Saints' Day", type: "special" },
+        { date: `${year}-12-08`, name: "Immaculate Conception", type: "special" },
+        { date: `${year}-12-24`, name: "Christmas Eve", type: "special" },
+        { date: `${year}-12-31`, name: "Last Day of Year", type: "special" }
+      ];
+    }
+
+    // Default initial RTAs
+    let rtas = JSON.parse(localStorage.getItem(STORAGE_KEY_RTAS)) || [
+      { id: "rta_1", name: "Maria Santos", status: "Active", createdAt: new Date().toISOString() },
+      { id: "rta_2", name: "Juan Dela Cruz", status: "Active", createdAt: new Date().toISOString() },
+      { id: "rta_3", name: "Angelo Reyes", status: "Active", createdAt: new Date().toISOString() }
+    ];
+
+    // Schedules Map: { "rtaId_YYYY-MM-DD": { rtaId, date, startShift, endShift, isRestDay, overrideReason, leaveType, notes } }
+    let schedules = JSON.parse(localStorage.getItem(STORAGE_KEY_SCHEDULES)) || {};
+
+    function saveState() {
+      localStorage.setItem(STORAGE_KEY_RTAS, JSON.stringify(rtas));
+      localStorage.setItem(STORAGE_KEY_SCHEDULES, JSON.stringify(schedules));
+    }
+
+    function getMonday(d) {
+      const date = new Date(d);
+      const day = date.getDay();
+      const diff = date.getDate() - day + (day === 0 ? -6 : 1);
+      return new Date(date.setDate(diff));
+    }
+
+    function formatDateKey(dateObj) {
+      const y = dateObj.getFullYear();
+      const m = String(dateObj.getMonth() + 1).padStart(2, '0');
+      const d = String(dateObj.getDate()).padStart(2, '0');
+      return `${y}-${m}-${d}`;
+    }
+
+    function formatShortDate(dateObj) {
+      const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+      return `${months[dateObj.getMonth()]} ${dateObj.getDate()}`;
+    }
+
+    // Ensures schedule time (shift) display is consistent and clean (e.g. 07:00-16:00)
+    function formatShiftDisplay(item) {
+      if (!item) return '<span class="text-slate-600 font-mono">-</span>';
+      
+      // Check leave type
+      if (item.leaveType) {
+        return `<span class="px-2 py-0.5 rounded text-[11px] font-bold bg-indigo-950 text-indigo-300 border border-indigo-800/80">${item.leaveType}</span>`;
+      }
+
+      // Check Rest Day
+      if (item.isRestDay) {
+        return `<span class="px-2 py-0.5 rounded text-[11px] font-semibold bg-slate-800 text-slate-400 border border-slate-700">RD</span>`;
+      }
+
+      // Format Military Shift Time
+      if (item.startShift && item.endShift) {
+        return `<span class="font-mono text-[11px] tracking-tight font-medium text-slate-200">${item.startShift}-${item.endShift}</span>`;
+      }
+
+      return '<span class="text-slate-600 font-mono">-</span>';
+    }
+
+    function renderGrid() {
+      const tbody = document.getElementById("scheduleGridBody");
+      tbody.innerHTML = "";
+
+      const activeRtas = rtas.filter(r => r.status === "Active");
+      const emptyState = document.getElementById("emptyRtaState");
+
+      if (activeRtas.length === 0) {
+        emptyState.classList.remove("hidden");
+      } else {
+        emptyState.classList.add("hidden");
+      }
+
+      // Compute dates for the 7 days of current week
+      const days = [];
+      const currentYear = currentWeekStartDate.getFullYear();
+      const phHolidays = getPhilippineHolidays(currentYear);
+
+      for (let i = 0; i < 7; i++) {
+        const dayDate = new Date(currentWeekStartDate);
+        dayDate.setDate(dayDate.getDate() + i);
+        const key = formatDateKey(dayDate);
+        const hol = phHolidays.find(h => h.date === key);
+        days.push({ dateObj: dayDate, key, holiday: hol });
+      }
+
+      // Render Sub-headers for week dates
+      const dayLabels = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+      for (let i = 0; i < 7; i++) {
+        const th = document.getElementById(`th-${i}`);
+        const dayInfo = days[i];
+        let holBadge = '';
+        
+        if (dayInfo.holiday) {
+          if (dayInfo.holiday.type === 'regular') {
+            holBadge = `<span class="block text-[9px] font-bold text-red-400 truncate mt-0.5" title="${dayInfo.holiday.name}">${dayInfo.holiday.name}</span>`;
+          } else {
+            holBadge = `<span class="block text-[9px] font-bold text-indigo-400 truncate mt-0.5" title="${dayInfo.holiday.name}">${dayInfo.holiday.name}</span>`;
+          }
+        }
+
+        th.innerHTML = `
+          <div class="text-slate-200">${dayLabels[i]}</div>
+          <div class="text-[11px] font-normal text-slate-400">${formatShortDate(dayInfo.dateObj)}</div>
+          ${holBadge}
+        `;
+      }
+
+      // Update date display header
+      const endDate = new Date(days[6].dateObj);
+      document.getElementById("weekDateRangeDisplay").textContent = 
+        `${formatShortDate(days[0].dateObj)}, ${days[0].dateObj.getFullYear()} – ${formatShortDate(endDate)}, ${endDate.getFullYear()}`;
+
+      // Render RTA rows
+      activeRtas.forEach(rta => {
+        const tr = document.createElement("tr");
+        tr.className = "hover:bg-slate-800/40 transition";
+
+        // Column 1: Name + Action buttons (Edit / Delete)
+        let nameColHtml = `
+          <td class="py-2.5 px-4 sticky left-0 bg-slate-900 border-r border-slate-700/80 z-10 flex items-center justify-between group">
+            <span class="font-medium text-slate-200 truncate max-w-[120px]" title="${rta.name}">${rta.name}</span>
+            ${isAdminActive ? `
+              <div class="flex items-center space-x-1">
+                <button onclick="openEditRtaModal('${rta.id}', '${rta.name.replace(/'/g, "\\'")}')" class="p-1 text-slate-400 hover:text-blue-400 transition" title="Edit RTA Name">
+                  <i data-lucide="edit-2" class="w-3.5 h-3.5"></i>
+                </button>
+                <button onclick="confirmDeleteRta('${rta.id}', '${rta.name.replace(/'/g, "\\'")}')" class="p-1 text-slate-400 hover:text-rose-400 transition" title="Delete RTA">
+                  <i data-lucide="trash-2" class="w-3.5 h-3.5"></i>
+                </button>
+              </div>
+            ` : ''}
+          </td>
+        `;
+
+        let daysHtml = "";
+        days.forEach(day => {
+          const schedKey = `${rta.id}_${day.key}`;
+          const item = schedules[schedKey];
+
+          // Determine visual style based on cell properties
+          let bgStyle = "bg-slate-900/40 hover:bg-slate-800/60";
+          let borderStyle = "border-r border-slate-800";
+          let reasonTag = "";
+
+          if (item) {
+            if (item.leaveType) {
+              bgStyle = "bg-blue-950/30";
+            } else if (item.isRestDay) {
+              bgStyle = "bg-slate-950/60";
+            } else if (item.overrideReason) {
+              bgStyle = "bg-amber-950/20";
+              reasonTag = `<span class="block text-[9px] font-semibold text-amber-400 mt-0.5">${item.overrideReason}</span>`;
+            }
+          }
+
+          if (day.holiday) {
+            if (day.holiday.type === 'regular') bgStyle += " bg-red-950/20";
+            else bgStyle += " bg-indigo-950/20";
+          }
+
+          const clickable = isAdminActive ? `onclick="openCellOverride('${rta.id}', '${rta.name.replace(/'/g, "\\'")}', '${day.key}')" class="cursor-pointer hover:border-indigo-500/50"` : "";
+
+          daysHtml += `
+            <td ${clickable} class="py-2.5 px-2 text-center transition ${bgStyle} ${borderStyle}">
+              <div class="flex flex-col items-center justify-center min-h-[36px]">
+                ${formatShiftDisplay(item)}
+                ${reasonTag}
+              </div>
+            </td>
+          `;
+        });
+
+        tr.innerHTML = nameColHtml + daysHtml;
+        tbody.appendChild(tr);
+      });
+
+      // Refresh icons
+      lucide.createIcons();
+    }
+
+    function navigateWeek(direction) {
+      currentWeekStartDate.setDate(currentWeekStartDate.getDate() + (direction * 7));
+      renderGrid();
+    }
+
+    function jumpToCurrentWeek() {
+      currentWeekStartDate = getMonday(new Date());
+      renderGrid();
+    }
+
+    function toggleLegend() {
+      const panel = document.getElementById("legendPanel");
+      panel.classList.toggle("hidden");
+    }
+
+    function handleAdminToggle() {
+      if (isAdminActive) {
+        isAdminActive = false;
+        updateAdminUI();
+      } else {
+        document.getElementById("pinInput").value = "";
+        openModal("pinModal");
+      }
+    }
+
+    function submitPinAuth() {
+      const entered = document.getElementById("pinInput").value;
+      if (entered === adminPin) {
+        isAdminActive = true;
+        closeModal("pinModal");
+        updateAdminUI();
+      } else {
+        alert("Invalid Admin PIN!");
+      }
+    }
+
+    function updateAdminUI() {
+      const badge = document.getElementById("adminBadge");
+      const toggleText = document.getElementById("adminToggleText");
+      const bulkBtn = document.getElementById("bulkScheduleBtn");
+      const addBtn = document.getElementById("addRtaBtn");
+
+      if (isAdminActive) {
+        badge.classList.remove("hidden");
+        badge.classList.add("flex");
+        toggleText.textContent = "Exit Admin";
+        bulkBtn.classList.remove("hidden");
+        bulkBtn.classList.add("flex");
+        addBtn.classList.remove("hidden");
+        addBtn.classList.add("flex");
+      } else {
+        badge.classList.add("hidden");
+        badge.classList.remove("flex");
+        toggleText.textContent = "Admin Login";
+        bulkBtn.classList.add("hidden");
+        addBtn.classList.add("hidden");
+      }
+      renderGrid();
+    }
+
+    function openAddRtaModal() {
+      document.getElementById("newRtaNameInput").value = "";
+      openModal("addRtaModal");
+    }
+
+    function saveNewRta() {
+      const name = document.getElementById("newRtaNameInput").value.trim();
+      if (!name) return alert("Please enter a valid RTA Name.");
+
+      const newId = "rta_" + Date.now();
+      rtas.push({ id: newId, name, status: "Active", createdAt: new Date().toISOString() });
+      saveState();
+      closeModal("addRtaModal");
+      renderGrid();
+    }
+
+    // Working Edit RTA name function
+    function openEditRtaModal(id, currentName) {
+      document.getElementById("editRtaId").value = id;
+      document.getElementById("editRtaNameInput").value = currentName;
+      openModal("editRtaModal");
+    }
+
+    function submitEditRta() {
+      const id = document.getElementById("editRtaId").value;
+      const newName = document.getElementById("editRtaNameInput").value.trim();
+
+      if (!newName) return alert("RTA Name cannot be empty.");
+
+      const target = rtas.find(r => r.id === id);
+      if (target) {
+        target.name = newName;
+        saveState();
+        closeModal("editRtaModal");
+        renderGrid();
+      }
+    }
+
+    // Working Delete RTA function
+    function confirmDeleteRta(id, name) {
+      if (confirm(`Are you sure you want to delete or deactivate RTA "${name}"?`)) {
+        const target = rtas.find(r => r.id === id);
+        if (target) {
+          target.status = "Inactive";
+          saveState();
+          renderGrid();
+        }
+      }
+    }
+
+    function openCellOverride(rtaId, rtaName, dateKey) {
+      document.getElementById("cellRtaId").value = rtaId;
+      document.getElementById("cellRtaName").textContent = rtaName;
+      document.getElementById("cellDate").value = dateKey;
+      document.getElementById("cellDateDisplay").textContent = dateKey;
+
+      const schedKey = `${rtaId}_${dateKey}`;
+      const existing = schedules[schedKey] || {};
+
+      document.getElementById("cellIsRestDay").checked = !!existing.isRestDay;
+      document.getElementById("cellStartTime").value = existing.startShift || "07:00";
+      document.getElementById("cellEndTime").value = existing.endShift || "16:00";
+      document.getElementById("cellLeaveType").value = existing.leaveType || "";
+      document.getElementById("cellOverrideReason").value = existing.overrideReason || "";
+      document.getElementById("cellNotes").value = existing.notes || "";
+
+      toggleCellRestDay(!!existing.isRestDay);
+      openModal("cellOverrideModal");
+    }
+
+    function toggleCellRestDay(isRest) {
+      const tf = document.getElementById("timeFields");
+      if (isRest) {
+        tf.classList.add("opacity-40", "pointer-events-none");
+      } else {
+        tf.classList.remove("opacity-40", "pointer-events-none");
+      }
+    }
+
+    function saveCellOverride() {
+      const rtaId = document.getElementById("cellRtaId").value;
+      const dateKey = document.getElementById("cellDate").value;
+      const isRestDay = document.getElementById("cellIsRestDay").checked;
+      const startShift = document.getElementById("cellStartTime").value;
+      const endShift = document.getElementById("cellEndTime").value;
+      const leaveType = document.getElementById("cellLeaveType").value;
+      const overrideReason = document.getElementById("cellOverrideReason").value;
+      const notes = document.getElementById("cellNotes").value;
+
+      const schedKey = `${rtaId}_${dateKey}`;
+      schedules[schedKey] = {
+        rtaId,
+        date: dateKey,
+        startShift,
+        endShift,
+        isRestDay,
+        leaveType,
+        overrideReason,
+        notes,
+        updatedAt: new Date().toISOString()
+      };
+
+      saveState();
+      closeModal("cellOverrideModal");
+      renderGrid();
+    }
+
+    let currentBulkMode = "single";
+
+    function openBulkModal() {
+      // Render active RTA checklist (No "All Active RTAs" option, list specific RTAs)
+      const container = document.getElementById("bulkRtaListContainer");
+      container.innerHTML = "";
+
+      const activeRtas = rtas.filter(r => r.status === "Active");
+      activeRtas.forEach(rta => {
+        const div = document.createElement("div");
+        div.className = "flex items-center space-x-2";
+        div.innerHTML = `
+          <input type="checkbox" value="${rta.id}" class="bulkRtaCheckbox rounded text-indigo-600 focus:ring-0">
+          <span class="text-xs text-slate-200">${rta.name}</span>
+        `;
+        container.appendChild(div);
+      });
+
+      // Default Date Range: Mon - Sun of current week
+      const monStr = formatDateKey(currentWeekStartDate);
+      const sunDate = new Date(currentWeekStartDate);
+      sunDate.setDate(sunDate.getDate() + 6);
+      const sunStr = formatDateKey(sunDate);
+
+      document.getElementById("bulkStartDate").value = monStr;
+      document.getElementById("bulkEndDate").value = sunStr;
+
+      // Render 7-day multi shift row inputs
+      renderMultiDayRows();
+
+      switchBulkMode('single');
+      openModal("bulkModal");
+    }
+
+    function selectAllBulkRtas(checkAll) {
+      document.querySelectorAll(".bulkRtaCheckbox").forEach(cb => cb.checked = checkAll);
+    }
+
+    function switchBulkMode(mode) {
+      currentBulkMode = mode;
+      const btnSingle = document.getElementById("btnModeSingle");
+      const btnMulti = document.getElementById("btnModeMulti");
+      const containerSingle = document.getElementById("bulkModeSingleContainer");
+      const containerMulti = document.getElementById("bulkModeMultiContainer");
+
+      if (mode === 'single') {
+        btnSingle.className = "py-2 px-3 text-xs rounded-lg border border-indigo-500 bg-indigo-500/10 text-indigo-300 font-medium";
+        btnMulti.className = "py-2 px-3 text-xs rounded-lg border border-slate-700 bg-slate-950 text-slate-400 font-medium";
+        containerSingle.classList.remove("hidden");
+        containerMulti.classList.add("hidden");
+      } else {
+        btnMulti.className = "py-2 px-3 text-xs rounded-lg border border-indigo-500 bg-indigo-500/10 text-indigo-300 font-medium";
+        btnSingle.className = "py-2 px-3 text-xs rounded-lg border border-slate-700 bg-slate-950 text-slate-400 font-medium";
+        containerMulti.classList.remove("hidden");
+        containerSingle.classList.add("hidden");
+      }
+    }
+
+    function renderMultiDayRows() {
+      const container = document.getElementById("multiDayRowsList");
+      container.innerHTML = "";
+
+      dayNames.forEach((dName, idx) => {
+        const isDefaultRest = (idx === 5 || idx === 6); // Sat & Sun default RD
+        const row = document.createElement("div");
+        row.className = "grid grid-cols-12 gap-2 items-center bg-slate-900 p-2 rounded border border-slate-800 text-xs";
+        row.innerHTML = `
+          <div class="col-span-3 font-medium text-slate-300">${dName}</div>
+          <div class="col-span-3 flex items-center">
+            <input type="checkbox" id="multiRd_${idx}" ${isDefaultRest ? 'checked' : ''} onchange="toggleMultiDayRest(${idx}, this.checked)" class="rounded text-indigo-600 focus:ring-0 mr-1.5">
+            <label for="multiRd_${idx}" class="text-[11px] text-slate-400 cursor-pointer">Rest Day</label>
+          </div>
+          <div class="col-span-3">
+            <input type="time" id="multiStart_${idx}" value="07:00" ${isDefaultRest ? 'disabled' : ''} class="w-full bg-slate-950 border border-slate-800 rounded px-1.5 py-1 text-[11px] text-slate-100 ${isDefaultRest ? 'opacity-30' : ''}">
+          </div>
+          <div class="col-span-3">
+            <input type="time" id="multiEnd_${idx}" value="16:00" ${isDefaultRest ? 'disabled' : ''} class="w-full bg-slate-950 border border-slate-800 rounded px-1.5 py-1 text-[11px] text-slate-100 ${isDefaultRest ? 'opacity-30' : ''}">
+          </div>
+        `;
+        container.appendChild(row);
+      });
+    }
+
+    function toggleMultiDayRest(idx, isRest) {
+      const startInp = document.getElementById(`multiStart_${idx}`);
+      const endInp = document.getElementById(`multiEnd_${idx}`);
+      if (isRest) {
+        startInp.disabled = true;
+        endInp.disabled = true;
+        startInp.classList.add("opacity-30");
+        endInp.classList.add("opacity-30");
+      } else {
+        startInp.disabled = false;
+        endInp.disabled = false;
+        startInp.classList.remove("opacity-30");
+        endInp.classList.remove("opacity-30");
+      }
+    }
+
+    function submitBulkSchedule() {
+      // Collect selected RTAs
+      const checkedRtas = Array.from(document.querySelectorAll(".bulkRtaCheckbox:checked")).map(cb => cb.value);
+      if (checkedRtas.length === 0) {
+        return alert("Please select at least one RTA to apply the bulk schedule.");
+      }
+
+      // Date Range Scope (Custom Range Date option only)
+      const startDateVal = document.getElementById("bulkStartDate").value;
+      const endDateVal = document.getElementById("bulkEndDate").value;
+
+      if (!startDateVal || !endDateVal) {
+        return alert("Please select both Start Date and End Date.");
+      }
+
+      const start = new Date(startDateVal + "T00:00:00");
+      const end = new Date(endDateVal + "T00:00:00");
+
+      if (start > end) {
+        return alert("Start Date must be earlier than or equal to End Date.");
+      }
+
+      // Process single vs multi pattern
+      let totalApplied = 0;
+      let curr = new Date(start);
+
+      while (curr <= end) {
+        const dateStr = formatDateKey(curr);
+        let dayOfWeek = curr.getDay(); // 0 = Sun, 1 = Mon ...
+        let dayIdx = dayOfWeek === 0 ? 6 : dayOfWeek - 1; // Map to 0 = Mon, 6 = Sun
+
+        checkedRtas.forEach(rtaId => {
+          let isRestDay = false;
+          let startShift = "07:00";
+          let endShift = "16:00";
+
+          if (currentBulkMode === 'single') {
+            const singleRestDays = Array.from(document.querySelectorAll(".bulkSingleRestDay:checked")).map(cb => parseInt(cb.value));
+            isRestDay = singleRestDays.includes(dayIdx);
+            startShift = document.getElementById("bulkSingleStartTime").value;
+            endShift = document.getElementById("bulkSingleEndTime").value;
+          } else {
+            isRestDay = document.getElementById(`multiRd_${dayIdx}`).checked;
+            startShift = document.getElementById(`multiStart_${dayIdx}`).value;
+            endShift = document.getElementById(`multiEnd_${dayIdx}`).value;
+          }
+
+          const schedKey = `${rtaId}_${dateStr}`;
+          schedules[schedKey] = {
+            rtaId,
+            date: dateStr,
+            startShift,
+            endShift,
+            isRestDay,
+            leaveType: "", // Bulk does not apply leave
+            overrideReason: "", // Override Reason REMOVED from Bulk
+            notes: "", // Remarks REMOVED from Bulk
+            updatedAt: new Date().toISOString()
+          };
+
+          totalApplied++;
+        });
+
+        curr.setDate(curr.getDate() + 1);
+      }
+
+      saveState();
+      closeModal("bulkModal");
+      renderGrid();
+      alert(`Bulk Shiftline Applied Successfully! Updated ${totalApplied} schedule records.`);
+    }
+
+    function openModal(id) {
+      document.getElementById(id).classList.remove("hidden");
+    }
+
+    function closeModal(id) {
+      document.getElementById(id).classList.add("hidden");
+    }
+
+    window.onload = function() {
+      // Initialize icons and render primary grid board
+      lucide.createIcons();
+      renderGrid();
+    };
+  </script>
+</body>
+</html>
