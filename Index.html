@@ -53,6 +53,10 @@
         <button id="addRtaBtn" onclick="openAddRtaModal()" class="hidden items-center px-3.5 py-1.5 text-xs font-medium rounded-lg transition bg-emerald-600 text-white hover:bg-emerald-500 shadow-md shadow-emerald-600/20">
           <i data-lucide="user-plus" class="w-4 h-4 mr-1.5"></i> Add RTA
         </button>
+
+        <button id="syncLeavesBtn" onclick="syncLeavesFromGAS()" class="hidden items-center px-3.5 py-1.5 text-xs font-medium rounded-lg transition bg-cyan-600 text-white hover:bg-cyan-500 shadow-md shadow-cyan-600/20">
+          <i data-lucide="refresh-cw" class="w-4 h-4 mr-1.5"></i> <span id="syncLeavesText">Sync Leaves</span>
+        </button>
       </div>
     </div>
   </header>
@@ -663,6 +667,7 @@
       const toggleText = document.getElementById("adminToggleText");
       const bulkBtn = document.getElementById("bulkScheduleBtn");
       const addBtn = document.getElementById("addRtaBtn");
+      const syncBtn = document.getElementById("syncLeavesBtn");
 
       if (isAdminActive) {
         badge.classList.remove("hidden");
@@ -672,12 +677,14 @@
         bulkBtn.classList.add("flex");
         addBtn.classList.remove("hidden");
         addBtn.classList.add("flex");
+        if(syncBtn) { syncBtn.classList.remove("hidden"); syncBtn.classList.add("flex"); }
       } else {
         badge.classList.add("hidden");
         badge.classList.remove("flex");
         toggleText.textContent = "Admin Login";
         bulkBtn.classList.add("hidden");
         addBtn.classList.add("hidden");
+        if(syncBtn) syncBtn.classList.add("hidden");
       }
       renderGrid();
     }
@@ -1030,6 +1037,101 @@
       document.getElementById(id).classList.add("hidden");
     }
 
+    async function syncLeavesFromGAS() {
+      try {
+        const gasUrl = "https://script.google.com/a/macros/shopee.com/s/AKfycbxU-SgDQAw-BPtDi-caeVkzWshp7NFZ8MekerLcHgohyvrk4XuaZ8--S74le3pz7aLDMw/exec";
+        const btnText = document.getElementById('syncLeavesText');
+        if(btnText) btnText.textContent = "Syncing...";
+
+        const response = await fetch(gasUrl);
+        
+        // Note: If you encounter a CORS error, ensure your Apps Script Web App is set to "Execute as: Me" and "Who has access: Anyone".
+        if (!response.ok) throw new Error("Network response was not ok");
+        const data = await response.json(); 
+        
+        let updatesMade = false;
+        let dbUpdates = [];
+
+        // Check array data from GAS. Automatically handles standard title cases.
+        if (Array.isArray(data)) {
+          data.forEach(leave => {
+            const status = leave.Status || leave.status || "";
+            
+            if (status.toLowerCase() === "approved") {
+              // Resolves variations of RTA Name keys
+              const rtaName = leave["RTA Name"] || leave.Name || leave.name || leave.rtaName || "";
+              const rta = rtas.find(r => r.name.toLowerCase() === rtaName.toLowerCase());
+              
+              if (rta) {
+                // Resolves variations of Date / Type keys
+                const startDateStr = leave.Date || leave.date || leave["Start Date"] || leave.startDate;
+                const endDateStr = leave["End Date"] || leave.endDate || startDateStr;
+                const leaveType = leave.Type || leave.type || leave["Leave Type"] || leave.leaveType || "VL";
+                
+                if (!startDateStr) return; // Skip if no recognizable date is found
+
+                const start = new Date(startDateStr);
+                const end = new Date(endDateStr);
+                let curr = new Date(start);
+                
+                while (curr <= end) {
+                  const dateKey = formatDateKey(curr);
+                  const schedKey = `${rta.id}_${dateKey}`;
+                  
+                  const existing = schedules[schedKey] || {
+                    rtaId: rta.id,
+                    date: dateKey,
+                    startShift: "07:00",
+                    endShift: "16:00",
+                    isRestDay: false,
+                    overrideReason: "",
+                    notes: ""
+                  };
+
+                  // Check if a change actually needs to be made
+                  if (existing.leaveType !== leaveType) {
+                    existing.leaveType = leaveType;
+                    existing.notes = "Auto-synced from Approved GAS Leave";
+                    existing.updatedAt = new Date().toISOString();
+                    
+                    schedules[schedKey] = existing;
+                    updatesMade = true;
+
+                    // Sync the new schedule back to Turso Database
+                    dbUpdates.push({
+                       sql: `INSERT INTO shift_schedules (id, rta_id, date_key, start_shift, end_shift, is_rest_day, leave_type, override_reason, notes, updated_at)
+                             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                             ON CONFLICT(id) DO UPDATE SET
+                             start_shift=excluded.start_shift, end_shift=excluded.end_shift, is_rest_day=excluded.is_rest_day,
+                             leave_type=excluded.leave_type, override_reason=excluded.override_reason, notes=excluded.notes, updated_at=excluded.updated_at`,
+                       args: [schedKey, existing.rtaId, existing.date, existing.startShift, existing.endShift, existing.isRestDay ? 1 : 0, existing.leaveType, existing.overrideReason, existing.notes, existing.updatedAt]
+                    });
+                  }
+                  curr.setDate(curr.getDate() + 1);
+                }
+              }
+            }
+          });
+        }
+
+        if (updatesMade) {
+          saveState();
+          renderGrid();
+          if (window.turso && dbUpdates.length > 0) {
+            await window.turso.batch(dbUpdates, "write");
+          }
+          console.log("GAS Leave Sync Complete: Schedule updated.");
+        } else {
+          console.log("GAS Leave Sync: No new approved leaves require updates.");
+        }
+      } catch (error) {
+        console.error("Failed to sync leaves from Google Apps Script:", error);
+      } finally {
+        const btnText = document.getElementById('syncLeavesText');
+        if(btnText) btnText.textContent = "Sync Leaves";
+      }
+    }
+
     window.onload = function() {
       // Initialize icons and render primary grid board
       lucide.createIcons();
@@ -1123,6 +1225,12 @@
       }
       
       console.log("Connected to Turso and synchronized data successfully!");
+
+      // 6. Automatically sync leaves from Google Apps Script on startup
+      if (typeof window.syncLeavesFromGAS === 'function') {
+        window.syncLeavesFromGAS();
+      }
+
     } catch (error) {
       console.error("Turso Connection Error:", error);
     }
